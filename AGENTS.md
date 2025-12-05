@@ -20,7 +20,7 @@
 
 - The main binary lives in `cmd/api` and uses packages under `internal/`.
 - Configuration is read from env vars via `internal/config` (`LISTEN_ADDR`, `STATIC_DIR`).
-- HTTP routing and middleware (CORS + logging) are defined in `internal/server` and should remain minimal and composable.
+- HTTP routing and middleware (logging if enabled) are defined in `internal/server` and should remain minimal and composable.
 - Speed test logic lives in `internal/speed` (download/upload/latency endpoints); prefer efficient streaming (`io.CopyN`, shared buffers) over per-request allocation.
 - The OCA directory handler in `internal/oca` should expose `/netflix/speedtest/v2` with a response shape compatible with the upstream fast.com app.
 - Telemetry ingestion lives in `internal/telemetry` and should mimic Netflix `ichnaea` behaviour enough for the JS logger to succeed (status code + headers), but can discard bodies by default.

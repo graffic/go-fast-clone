@@ -57,39 +57,9 @@ The Go 1.22+ pattern-based routing on `http.ServeMux` is used (e.g., `GET /path`
 
 ### Middleware Stack
 
-`Server.Handler()` wraps the mux with two middlewares in order:
+`Server.Handler()` wraps the mux with:
 
-1. `CORSMiddleware` – handles CORS and preflight requests.
-2. `LoggingMiddleware` – logs request/response metrics.
-
-`ListenAndServe()` binds the wrapped handler to `cfg.ListenAddr` and logs the static directory.
-
-#### CORSMiddleware
-
-Defined in `internal/server/middleware.go`:
-
-- Detects preflight requests:
-  - `r.Method == OPTIONS`.
-  - `Access-Control-Request-Method` header present.
-  - `Origin` header present.
-- For preflight:
-  - Sets `Access-Control-Allow-Origin: *` (MVP mode: allow any origin).
-  - Sets `Access-Control-Allow-Methods: GET, POST, OPTIONS`.
-  - Sets `Access-Control-Allow-Headers: Content-Type, Authorization`.
-  - Responds with `204 No Content` and returns.
-- For non-preflight:
-  - Passes the request to the next handler unmodified (static and API handlers can add extra headers if needed).
-
-#### LoggingMiddleware
-
-Also in `internal/server/middleware.go`:
-
-- Uses `github.com/felixge/httpsnoop` to capture metrics:
-  - HTTP status code.
-  - Number of bytes written.
-  - Request duration.
-- Logs structured fields via zerolog:
-  - `method`, `path`, `code`, `received_bytes`, `sent_bytes`, `duration_ms`.
+1. `LoggingMiddleware` – logs request/response metrics.
 
 
 ## OCA Directory Service
@@ -250,11 +220,7 @@ Because this handler is registered last, it acts as a catch-all for any paths no
 
 ## CORS and Security Considerations
 
-- `CORSMiddleware` allows broad CORS access for the MVP:
-  - `Access-Control-Allow-Origin: *` on preflight responses.
-  - `GET`, `POST`, `OPTIONS` methods allowed.
-  - `Content-Type`, `Authorization` headers allowed.
-- Telemetry endpoint sets a stricter and more detailed set of headers to emulate the original service.
+- No CORS needed as we run from the same host.
 - HTTPS is expected to be provided either by a reverse proxy (nginx, Caddy, Envoy) or by terminating TLS directly in front of the Go server; this is deployment-dependent and not handled in the current code.
 
 

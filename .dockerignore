@@ -1,13 +1,12 @@
-.git
-.gitignore
-.dockerignore
-README.md
-docs/
-bin/
-tmp/
-venv/
-__pycache__/
-*.pyc
+# Ignore everything by default and re-include only needed files
+*
+
+# Include only needed files
+!cmd/
+!internal/
+!scripts/
+!go.mod
+!go.sum
 
 
 

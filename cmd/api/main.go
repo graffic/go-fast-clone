@@ -18,7 +18,6 @@ import (
 
 	"fastclone/internal/config"
 	"fastclone/internal/server"
-	"fastclone/internal/speed"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -28,9 +27,6 @@ func main() {
 	cfg := config.Load()
 
 	setupLogging()
-
-	// Initialize the random buffer for speed tests
-	speed.Init()
 
 	srv := server.New(cfg)
 

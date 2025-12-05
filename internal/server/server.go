@@ -3,6 +3,7 @@ package server
 
 import (
 	"net/http"
+	"net/http/pprof"
 
 	"github.com/rs/zerolog/log"
 
@@ -48,11 +49,24 @@ func (s *Server) setupRoutes() {
 
 	// Static files (catch-all for webapp assets) - must be last
 	s.router.Handle("/", staticFS)
+
+	if s.cfg.EnablePprof {
+		log.Info().Msg("Pprof enabled")
+		s.router.HandleFunc("/debug/pprof/", pprof.Index)
+		s.router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		s.router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		s.router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		s.router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	}
 }
 
 // Handler returns the HTTP handler with all middleware applied.
 func (s *Server) Handler() http.Handler {
-	return LoggingMiddleware(CORSMiddleware(s.router))
+	if s.cfg.HttpLogging {
+		log.Info().Msg("HTTP logging enabled")
+		return LoggingMiddleware(s.router)
+	}
+	return s.router
 }
 
 // ListenAndServe starts the HTTP server.

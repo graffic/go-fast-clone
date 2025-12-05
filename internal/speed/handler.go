@@ -2,14 +2,13 @@
 package speed
 
 import (
+	"bytes"
 	"io"
 	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -22,7 +21,7 @@ var (
 )
 
 // Init initializes the random buffer used for speed tests.
-func Init() {
+func init() {
 	// Use a seeded random generator to fill the buffer
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	r.Read(randomBuffer)
@@ -33,15 +32,19 @@ func HandleDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatUint(MaxPayloadBytes, 10))
 
-	_, err := w.Write(randomBuffer[:MaxPayloadBytes])
+	_, err := io.Copy(w, bytes.NewReader(randomBuffer[:MaxPayloadBytes]))
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to write download response")
+		// client disconnected
 	}
 }
 
 // HandleDownloadRange handles GET /speedtest/range/0-{N} for ranged download.
 func HandleDownloadRange(w http.ResponseWriter, r *http.Request) {
 	rangePath := r.PathValue("range")
+
+	if rangePath == "0-0" {
+		return
+	}
 
 	// Expected format: "0-{N}"
 	parts := strings.Split(rangePath, "-")
@@ -62,9 +65,6 @@ func HandleDownloadRange(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatUint(totalSize, 10))
 
-	// Allow CORS (already handled by middleware, but specific headers might be needed if not covered)
-	// The middleware handles Access-Control-Allow-Origin: *
-
 	remaining := totalSize
 
 	for remaining > 0 {
@@ -73,10 +73,9 @@ func HandleDownloadRange(w http.ResponseWriter, r *http.Request) {
 		if remaining < toWrite {
 			toWrite = remaining
 		}
-
-		n, err := w.Write(randomBuffer[:toWrite])
+		n, err := io.Copy(w, bytes.NewReader(randomBuffer[:toWrite]))
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to write download range response")
+			// Client disconnected 99% of the time.
 			return
 		}
 		remaining -= uint64(n)

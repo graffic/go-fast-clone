@@ -5,6 +5,8 @@ package oca
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 // Location represents a geographic location.
@@ -38,7 +40,7 @@ type DirectoryResponse struct {
 
 // HandleDirectory handles GET /netflix/speedtest/v2.
 func HandleDirectory(w http.ResponseWriter, r *http.Request) {
-	baseURL := "/speedtest"
+	baseURL := "/speedtest?e=" + strconv.FormatInt(time.Now().UnixMilli(), 10)
 	location := Location{
 		City:    "LocalCity",
 		Country: "LC",

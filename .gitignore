@@ -1,3 +1,6 @@
 original-webapp/
 __pycache__/
 *.pyc
+*.tar
+cpu.txt
+pprof*

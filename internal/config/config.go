@@ -9,16 +9,21 @@ import (
 type Config struct {
 	// ListenAddr is the address:port the server listens on.
 	ListenAddr string
-
 	// StaticDir is the path to the static files directory (original-webapp).
 	StaticDir string
+	// HttpLogging flag to enable logging of http requests
+	HttpLogging bool
+	// EnablePprof flag to add debug/pprof endpoints for profiling
+	EnablePprof bool
 }
 
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	return &Config{
-		ListenAddr: getEnv("LISTEN_ADDR", ":8080"),
-		StaticDir:  getEnv("STATIC_DIR", "original-webapp"),
+		ListenAddr:  getEnv("LISTEN_ADDR", ":8080"),
+		StaticDir:   getEnv("STATIC_DIR", "original-webapp"),
+		HttpLogging: getEnv("HTTP_LOGGING", "false") == "true",
+		EnablePprof: getEnv("ENABLE_PPROF", "false") == "true",
 	}
 }
 
