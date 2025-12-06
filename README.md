@@ -52,16 +52,15 @@ Environment variables:
 - `STATIC_DIR` – path to static files (default `original-webapp` in local runs; `/app/original-webapp` in the container)
 - `HTTP_LOGGING` – enable HTTP request logging (default `false`)
 - `ENABLE_PPROF` – enable debug/pprof endpoints (default `false`)
-- `RANDOM_DATA_FILE` – path (preferably on tmpfs, default `/dev/shm/random_data`) used as the backing file for speed test payloads; populated on startup.
 
-### Other notes
+## Other notes
 
-## AI usage
+### AI usage
 
 AI has been used to jumpstart and scaffold this project:
 - Find insights and details in Netflix webapp code to build the backend.
 - Scaffold the patch python script and the golang project.
 
-## Copyright
+### Copyright
 
 The original webapp code that it is not committed here but will be used when building is property of Netflix.

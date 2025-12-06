@@ -31,7 +31,7 @@ func New(cfg *config.Config) *Server {
 
 	// Speed test endpoints - use exact path matching to avoid conflicts
 	// The {range...} wildcard captures everything after /speedtest/range/
-	speedHandler, err := speed.NewSpeedTestHandler(cfg.RandomDataFile)
+	speedHandler, err := speed.NewSpeedTestHandler()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create speed test handler")
 	}

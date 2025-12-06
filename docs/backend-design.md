@@ -28,13 +28,6 @@ The design is based on `docs/backend-working-plan.md` and the current Go impleme
 
 `internal/config/config.go` defines a `Config` struct and loads values from environment variables:
 
-- `ListenAddr` (`LISTEN_ADDR`, default `":8080"`)
-  - Address and port the HTTP server listens on.
-- `StaticDir` (`STATIC_DIR`, default `"original-webapp"`)
-  - Directory served as static files at `/`.
-- `RandomDataFile` (`RANDOM_DATA_FILE`, default `"/dev/shm/random_data"`)
-  - Path to the file (ideally on tmpfs) that stores pre-generated random bytes used as the source for download payloads.
-
 
 ## HTTP Server and Middleware
 

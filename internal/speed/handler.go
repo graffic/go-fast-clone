@@ -2,6 +2,7 @@
 package speed
 
 import (
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -19,25 +21,44 @@ const (
 )
 
 type SpeedTestHandler struct {
-	randomBufferFile string
+	memFdPath string
+	// memFile keeps the original file descriptor open
+	memFile *os.File
 }
 
-func NewSpeedTestHandler(randomBufferFile string) (*SpeedTestHandler, error) {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	heavyData := make([]byte, ReadBufferSize)
-	r.Read(heavyData)
-	err := os.WriteFile(randomBufferFile, heavyData, 0644)
+func NewSpeedTestHandler() (*SpeedTestHandler, error) {
+	name := "fast_clone_speed_test"
+	fd, err := unix.MemfdCreate(name, unix.MFD_CLOEXEC)
 	if err != nil {
 		return nil, err
 	}
+
+	// Wrap the fd in an os.File to use convenient Write methods
+	// We pass the fd directly. os.NewFile does not duplicate it, just wraps it.
+	f := os.NewFile(uintptr(fd), name)
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	heavyData := make([]byte, ReadBufferSize)
+	r.Read(heavyData)
+
+	if _, err := f.Write(heavyData); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	// Path to access this FD via /proc filesystem.
+	// Opening this path creates a new file description with its own offset.
+	memFdPath := fmt.Sprintf("/proc/self/fd/%d", fd)
+
 	log.Info().
-		Str("random_buffer_file", randomBufferFile).
+		Str("memfd_path", memFdPath).
 		Int64("read_buffer_size", ReadBufferSize).
 		Int64("max_payload_bytes", MaxPayloadBytes).
-		Msg("Speed test handler initialized")
+		Msg("Speed test handler (memfd) initialized")
 
 	return &SpeedTestHandler{
-		randomBufferFile: randomBufferFile,
+		memFdPath: memFdPath,
+		memFile:   f,
 	}, nil
 }
 
@@ -45,12 +66,19 @@ func (h *SpeedTestHandler) ServeContent(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.FormatInt(amount, 10))
 
-	f, _ := os.Open(h.randomBufferFile)
+	// Open a fresh file descriptor/description for this request
+	f, err := os.Open(h.memFdPath)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to open memfd path")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 	defer f.Close()
 
-	// This triggers sendfile() because io.CopyN creates a LimitedReader wrapping the OS file
-	// which net/http detects and optimizes.
+	// io.CopyN creates a LimitedReader.
+	// net/http optimizes this by unwrapping it and using sendfile if the underlying reader is *os.File
 	io.CopyN(w, f, amount)
+	// Can errors happen here? Yes, they are usually on connection closed before finishing to write.
 }
 
 // HandleDownload handles GET /speedtest/ for download speed tests without ranges
