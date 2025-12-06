@@ -24,9 +24,9 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
-
 	setupLogging()
+
+	cfg := config.Load()
 
 	srv := server.New(cfg)
 

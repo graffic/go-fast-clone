@@ -19,11 +19,10 @@ The design is based on `docs/backend-working-plan.md` and the current Go impleme
 
 - **Main binary**: `cmd/api/main.go`.
 - Startup sequence:
-  1. Load configuration via `internal/config.Load()`.
-  2. Configure logging via `setupLogging()` using zerolog.
-  3. Initialize speed test buffer via `internal/speed.Init()`.
-  4. Create HTTP server via `internal/server.New(cfg)`.
-  5. Call `ListenAndServe()` and log fatal errors.
+  1. Configure logging via `setupLogging()` using zerolog.
+  2. Load configuration via `internal/config.Load()`.
+  3. Create HTTP server via `internal/server.New(cfg)`.
+  4. Call `ListenAndServe()` and log fatal errors.
 
 ### Configuration
 
@@ -33,6 +32,8 @@ The design is based on `docs/backend-working-plan.md` and the current Go impleme
   - Address and port the HTTP server listens on.
 - `StaticDir` (`STATIC_DIR`, default `"original-webapp"`)
   - Directory served as static files at `/`.
+- `RandomDataFile` (`RANDOM_DATA_FILE`, default `"/dev/shm/random_data"`)
+  - Path to the file (ideally on tmpfs) that stores pre-generated random bytes used as the source for download payloads.
 
 
 ## HTTP Server and Middleware
@@ -46,10 +47,10 @@ The design is based on `docs/backend-working-plan.md` and the current Go impleme
 - OCA directory:
   - `"GET /netflix/speedtest/v2"` → `oca.HandleDirectory`.
 - Speed test endpoints:
-  - `"GET /speedtest/range/{range}"` → `speed.HandleDownloadRange`.
-  - `"POST /speedtest/range/{range}"` → `speed.HandleUploadRange`.
-  - `"GET /speedtest"` → `speed.HandleDownload`.
-  - `"POST /speedtest"` → `speed.HandleUpload`.
+  - `"GET /speedtest/range/{range}"` → `speedHandler.HandleDownloadRange` (`SpeedTestHandler`).
+  - `"POST /speedtest/range/{range}"` → `speedHandler.HandleUploadRange` (`SpeedTestHandler`).
+  - `"GET /speedtest"` → `speedHandler.HandleDownload` (`SpeedTestHandler`).
+  - `"POST /speedtest"` → `speedHandler.HandleUpload` (`SpeedTestHandler`).
 - Telemetry:
   - `"POST /telemetry/cl2"` → `telemetry.HandleIngest`.
 
@@ -115,31 +116,33 @@ Based on `backend-working-plan.md`, future iterations should:
 
 `internal/speed/handler.go` defines:
 
-- `ReadBufferSize uint64 = 30 * 1024 * 1024` (30 MiB).
-- `randomBuffer = make([]byte, ReadBufferSize)`.
+- `ReadBufferSize int64 = 30 * 1024 * 1024` (30 MiB).
+- `MaxPayloadBytes int64 = 25 * 1024 * 1024`.
+- `SpeedTestHandler` struct with `randomBufferFile` path.
 
-`Init()` fills `randomBuffer` with random bytes using a time-seeded PRNG. This buffer is reused for download responses, avoiding per-request allocations.
+`NewSpeedTestHandler(randomBufferFile string)` fills a `ReadBufferSize`-sized slice with random bytes using a time-seeded PRNG and writes it to the configured `randomBufferFile` (typically on tmpfs). This file is reused for download responses and allows the kernel to use `sendfile`/zero-copy I/O when serving speed test payloads.
+
+### Performance Notes
+
+- For best throughput and minimal latency, `RandomDataFile` should point to a tmpfs-backed path (e.g., `/dev/shm/random_data`) so that downloads hit memory instead of disk.
+- Using `io.CopyN` from this file to the HTTP response allows Go’s `net/http` server and the OS kernel to use zero-copy paths (such as `sendfile`) where available, reducing CPU usage under load.
 
 ### Range-based Download
 
-Route: `GET /speedtest/range/{range}` → `HandleDownloadRange`.
+Route: `GET /speedtest/range/{range}` → `SpeedTestHandler.HandleDownloadRange`.
 
 - Path parameter `range` is expected in the form `0-{N}`.
 - Steps:
   1. Extract `rangePath := r.PathValue("range")`.
   2. Split by `-` and validate the `0-{N}` format.
-  3. Parse `{N}` as `uint64` (`endByte`).
-  4. Compute `totalSize := endByte + 1` (bytes from 0 to N inclusive).
-  5. Set headers:
-     - `Content-Type: application/octet-stream`.
-     - `Content-Length: totalSize`.
-  6. Loop while `remaining > 0`:
-     - Determine `toWrite` as the min of `ReadBufferSize` and `remaining`.
-     - Write `randomBuffer[:toWrite]` to the client.
-     - Decrease `remaining` by number of bytes actually written.
-  7. On write error (e.g., disconnect), return immediately.
+  3. Parse `{N}` as `int64` (`endByte`) and ensure it is `< MaxPayloadBytes`.
+  4. Compute `amount := endByte + 1` (bytes from 0 to N inclusive).
+  5. Delegate to `ServeContent(w, r, amount)`, which:
+     - Sets `Content-Type: application/octet-stream`.
+     - Sets `Content-Length` to `amount`.
+     - Opens `randomBufferFile` and uses `io.CopyN` from the file to the response writer, enabling the Go `net/http` server and kernel to use sendfile/zero-copy paths where supported.
 
-This provides a large, deterministic stream suitable for the fast.com client’s bandwidth measurement logic.
+This provides a large, deterministic stream suitable for the fast.com client’s bandwidth measurement logic while minimizing per-request CPU and allocations.
 
 ### Range-based Upload and Latency
 
@@ -156,27 +159,24 @@ Route: `POST /speedtest/range/{range}` → `HandleUploadRange`.
 
 This dual behavior matches the fast.com pattern, where `0-0` is used as a latency ping.
 
-### Non-range Download and Upload (Stubs)
+### Non-range Download and Upload
 
 Routes:
 
-- `GET /speedtest` → `HandleDownload`.
-- `POST /speedtest` → `HandleUpload`.
+- `GET /speedtest` → `SpeedTestHandler.HandleDownload`.
+- `POST /speedtest` → `SpeedTestHandler.HandleUpload`.
 
 Current status:
 
 - **HandleDownload**:
-  - Logs a message indicating it is not implemented.
-  - Returns `501 Not Implemented` with a JSON body listing TODOs:
-    - Stream a large body (e.g., 25MB).
-    - Set `Content-Length` for progress events.
-    - Support concurrent connections.
+  - Uses the same `ServeContent` helper as the range-based download.
+  - Streams `MaxPayloadBytes` from `randomBufferFile` to the client with `Content-Length` set.
 
 - **HandleUpload**:
-  - Logs a message indicating it is not implemented.
-  - Returns `501 Not Implemented` with a small JSON error.
+  - Drains the request body to `io.Discard` and returns `200 OK`.
 
-These endpoints can be implemented later if the fast.com client requires them in addition to the range-based endpoints.
+These endpoints complement the range-based endpoints and are implemented efficiently using the shared backing file.
+
 
 
 ## Telemetry Ingestion

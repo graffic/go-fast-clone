@@ -50,6 +50,9 @@ Then open: http://localhost:8080
 Environment variables:
 - `LISTEN_ADDR` – address/port to listen on (default `:8080`)
 - `STATIC_DIR` – path to static files (default `original-webapp` in local runs; `/app/original-webapp` in the container)
+- `HTTP_LOGGING` – enable HTTP request logging (default `false`)
+- `ENABLE_PPROF` – enable debug/pprof endpoints (default `false`)
+- `RANDOM_DATA_FILE` – path (preferably on tmpfs, default `/dev/shm/random_data`) used as the backing file for speed test payloads; populated on startup.
 
 ### Other notes
 
