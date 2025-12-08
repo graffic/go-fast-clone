@@ -1,6 +1,8 @@
 # Fastclone
 
-Self-hosted backend for the official https://fast.com speed test web app from Netflix
+Self-hosted backend for the official https://fast.com speed test web app from Netflix.
+
+This repo contains a backend for the fast.com web app and a patcher for the web app to use this backend. When building it as a container image, you can self host your own version of fast.com.
 
 
 ## Run Locally
@@ -53,6 +55,20 @@ Environment variables:
 - `HTTP_LOGGING` – enable HTTP request logging (default `false`)
 - `ENABLE_PPROF` – enable debug/pprof endpoints (default `false`)
 
+## Performance 
+
+The most performance is achieved when the webbrowser can access the application without anything in the middle.
+
+- A normal docker run will start a `docker-proxy` so data will travel from kernel (sendfile) -> user space for the proxy -> down again into the kernel to be sent to the network. You probably need to disable the `userland-proxy` in your `docker/daemon.json` for better performance.
+- An ingress/loadbalancer/tls service that might sit in front of this app, will also cause performance issues.
+
+
+### Interesting things to try/check.
+
+- The right TCP kernel settings in linux for better performance.
+- Good ingress alternatives to host this tool behind.
+- Self hosted tls termination with ktls.
+
 ## Other notes
 
 ### AI usage
@@ -63,4 +79,6 @@ AI has been used to jumpstart and scaffold this project:
 
 ### Copyright
 
-The original webapp code that it is not committed here but will be used when building is property of Netflix.
+The original webapp code that it is not committed here but will be used when building the container image is property of Netflix. That's why there are no complete builds of the final docker image, as I haven't asked for permission to redistribute the Netflix fast.com webapp.
+
+The rest of the code in this repo uses the MIT License.
